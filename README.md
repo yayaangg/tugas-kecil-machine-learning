@@ -1,1 +1,0 @@
-# tugas-kecil-machine-learning
