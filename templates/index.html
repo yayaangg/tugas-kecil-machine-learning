@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Peramalan Energi - Inces Aya</title>
+    <title>Dashboard Peramalan Energi</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
@@ -44,7 +44,7 @@
         </div>
         <div class="col-md-3">
             <div class="card stat-card">
-                <small class="text-secondary d-block mb-2">PREDIKSI +6 JAM (MW)</small>
+                <small class="text-secondary d-block mb-2">PREDIKSI BEBAN PUNCAK ENERGI(MW)</small>
                 <div id="pred-val" class="stat-value text-pred">--</div>
             </div>
         </div>
@@ -70,7 +70,7 @@
     const energyChart = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: [], // Ini akan berisi jam-jam masa depan (T+6)
+            labels: [], // Akan berisi jam masa depan (06:00)
             datasets: [
                 {
                     label: 'Beban Aktual (Saat Ini)',
@@ -82,7 +82,7 @@
                     tension: 0.3
                 },
                 {
-                    label: 'Prediksi (Masa Depan +6 Jam)',
+                    label: 'Prediksi (+6 Jam)',
                     data: [],
                     borderColor: '#f43f5e',
                     backgroundColor: 'rgba(244, 63, 94, 0.1)',
@@ -92,46 +92,73 @@
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: { ticks: { color: '#94a3b8' } },
-                x: { ticks: { color: '#94a3b8' } }
+            // Cari bagian scales di dalam Chart , lalu ubah jadi seperti ini:
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        // --- KUNCI RENTANG TETAP DI SINI ---
+                        min: 15000, // Batas bawah tetap
+                        max: 45000, // Batas atas tetap
+                        // ----------------------------------
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        ticks: { 
+                            color: '#94a3b8',
+                            stepSize: 5000 // Agar garis horizontal muncul setiap kelipatan 5000 MW
+                        },
+                        title: { 
+                            display: true, 
+                            text: 'Daya Listrik (MW)', 
+                            color: 'white' 
+                        }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#94a3b8' }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        labels: { color: 'white' }
+                    }
+                }
             }
-        }
     });
 
     function updateDashboard() {
         fetch('/get_prediction')
             .then(response => response.json())
             .then(data => {
-                // 1. Ambil waktu dari server (Misal: 00:00)
                 const inputTime = new Date(data.time);
-                const jamSekarang = String(inputTime.getHours()).padStart(2, '0') + ":" + String(inputTime.getMinutes()).padStart(2, '0');
                 
-                // 2. Hitung waktu masa depan (Tambah 6 Jam -> Jadi 06:00)
+                // 1. FORMAT UNTUK CARD (Tanggal & Jam Asli)
+                const opsiTanggal = { day: '2-digit', month: 'short', year: 'numeric' };
+                const tglAsli = inputTime.toLocaleDateString('id-ID', opsiTanggal);
+                const jamAsli = String(inputTime.getHours()).padStart(2, '0') + ":" + String(inputTime.getMinutes()).padStart(2, '0');
+                
+                // 2. FORMAT UNTUK GRAFIK (Hanya Jam +6)
                 const targetTime = new Date(inputTime.getTime() + (6 * 60 * 60 * 1000));
                 const jamMasaDepan = String(targetTime.getHours()).padStart(2, '0') + ":" + String(targetTime.getMinutes()).padStart(2, '0');
 
-                // 3. Tampilkan Jam Sekarang di CARD (Sesuai maumu)
-                document.getElementById('time-val').innerText = jamSekarang;
+                // Update Elemen di Dashboard
+                // Gabungkan Tanggal dan Jam di Card Waktu
+                document.getElementById('time-val').innerHTML = `<span style="font-size: 0.9rem; display: block; color: #64748b;">${tglAsli}</span>${jamAsli}`;
+                
                 document.getElementById('actual-val').innerText = Math.round(data.actual).toLocaleString();
                 document.getElementById('pred-val').innerText = Math.round(data.prediction).toLocaleString();
                 document.getElementById('weather-val').innerText = data.weather.toUpperCase();
                 document.getElementById('temp-val').innerText = data.temp.toFixed(1) + " °K";
 
-                // 4. Update Grafik agar labelnya pakai Jam Masa Depan
+                // Update Chart
                 if (energyChart.data.labels.length > 30) {
                     energyChart.data.labels.shift();
                     energyChart.data.datasets[0].data.shift();
                     energyChart.data.datasets[1].data.shift();
                 }
 
-                // Label sumbu X pake jam masa depan (Jam 06:00)
+                // Sumbu X hanya menunjukkan jam ramalan
                 energyChart.data.labels.push(jamMasaDepan);
-                
-                // Masukkan data
                 energyChart.data.datasets[0].data.push(data.actual);     
                 energyChart.data.datasets[1].data.push(data.prediction); 
                 
@@ -139,7 +166,6 @@
             });
     }
 
-    // Update setiap 2 detik biar cepet kelihatan perubahannya
     updateDashboard();
     setInterval(updateDashboard, 2000);
 </script>
